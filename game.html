@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Green Zone — Tiny Timing Game</title>
+<style>
+  :root{
+    --bg:#0f1724; --card:#0b1220; --accent:#16a34a; --muted:#9aa7b2; --glass: rgba(255,255,255,0.03);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;color:#e6eef6;background:linear-gradient(180deg,#071523 0%,#06101b 100%);} 
+  .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:28px;}
+  .ui{
+    width:360px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:14px;padding:18px;box-shadow:0 6px 30px rgba(2,6,23,0.6);position:relative;
+  }
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  h1{font-size:16px;margin:0;color:#dff7e5;letter-spacing:0.4px}
+  .scores{font-size:13px;color:var(--muted);text-align:right}
+  .scores b{color:#fff;font-size:15px;display:block}
+  .instructions{font-size:13px;color:var(--muted);margin:8px 0 14px}
+  .arena{height:300px;display:flex;align-items:center;justify-content:center;position:relative}
+  .circle{
+    width:220px;height:220px;border-radius:50%;background:radial-gradient(circle at 30% 30%, rgba(22,163,74,0.06), rgba(255,255,255,0.01));
+    display:grid;place-items:center;position:relative;box-shadow: inset 0 -6px 20px rgba(2,6,23,0.5);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; cursor: pointer;
+  }
+  .zone{
+    position:absolute;top:24px;left:50%;transform:translateX(-50%);width:60px;height:60px;border-radius:50% 50% 0 0/100% 100% 0 0;
+    background:conic-gradient(var(--accent) 0deg, rgba(22,163,74,0.9) 60deg, rgba(22,163,74,0.25) 120deg, transparent 120deg);
+    filter:drop-shadow(0 6px 10px rgba(22,163,74,0.08));
+    mix-blend-mode:screen;pointer-events:none;
+  }
+  .needle{
+    position:absolute;left:50%;top:50%;width:4px;height:105px;background:linear-gradient(180deg,#9feab2,#0b5);transform-origin:50% 86px;border-radius:3px;box-shadow:0 8px 20px rgba(0,0,0,0.6);
+  }
+  .center{
+    position:absolute;width:22px;height:22px;background:linear-gradient(180deg,#fff,#d7f9d7);border-radius:50%;box-shadow:0 3px 8px rgba(2,6,23,0.7);
+  }
+  .panel{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+  .btn{background:var(--accent);color:#042117;padding:8px 12px;border-radius:8px;border:none;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(22,163,74,0.12)}
+  .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);font-weight:600}
+  .timer{height:8px;background:rgba(255,255,255,0.04);border-radius:99px;overflow:hidden;flex:1;margin-right:12px}
+  .timer > i{display:block;height:100%;background:linear-gradient(90deg,#16a34a,#58d68d);width:100%;}
+  .meta{font-size:13px;color:var(--muted);text-align:center;margin-top:10px}
+  .big-score{font-size:28px;color:#fff;font-weight:800}
+  .overlay{
+    position:absolute;inset:0;background:linear-gradient(180deg, rgba(2,6,23,0.6), rgba(2,6,23,0.6));display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:14px;color:#fff;backdrop-filter: blur(4px);
+  }
+  .overlay.hidden{display:none}
+  .end-msg{font-size:20px;margin-bottom:6px}
+  .sub{color:var(--muted);margin-bottom:14px}
+  .pulse{animation:pulse 700ms ease-out}
+  @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}
+  footer{font-size:12px;color:var(--muted);text-align:center;margin-top:10px}
+  @media (max-width:420px){ .ui{width:95vw} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="ui" id="ui">
+    <header>
+      <h1>Green Zone</h1>
+      <div class="scores">
+        <div>Score <b id="score">0</b></div>
+        <div>Best <b id="best">0</b></div>
+      </div>
+    </header>
+    <div class="instructions">Click / tap when the spinning needle passes the green zone — fast timing wins!</div>
+    <div class="arena">
+      <div class="circle" id="circle" aria-hidden="true">
+        <div class="zone"></div>
+        <div class="needle" id="needle"></div>
+        <div class="center"></div>
+      </div>
+      <div class="overlay hidden" id="startOverlay">
+        <div style="text-align:center">
+          <div style="font-weight:800;font-size:22px;margin-bottom:6px">Ready?</div>
+          <div class="sub">Game length random each run: 20–60s</div>
+          <button class="btn" id="startBtn">Start</button>
+        </div>
+      </div>
+      <div class="overlay hidden" id="endOverlay">
+        <div style="text-align:center">
+          <div class="end-msg" id="endTitle">Time's up!</div>
+          <div class="sub" id="endSub">Score: <span id="finalScore">0</span></div>
+          <button class="btn" id="restartBtn">One more try</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:8px">
+      <div style="display:flex;align-items:center;gap:10px;flex:1">
+        <div class="timer" aria-hidden="true"><i id="timerBar"></i></div>
+        <div style="text-align:right">
+          <div style="font-size:12px;color:var(--muted)">Time left</div>
+          <div class="big-score" id="timeText">--</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta">
+      <div id="combo" style="font-weight:700;color:#9feab2">Combo: 0</div>
+    </div>
+    <footer>Tap anywhere in the circle. Precise hits increase speed and combo. Good luck!</footer>
+  </div>
+</div>
+
+<script>
+(() => {
+  const needle = document.getElementById('needle');
+  const circle = document.getElementById('circle');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const timeText = document.getElementById('timeText');
+  const timerBar = document.getElementById('timerBar');
+  const comboEl = document.getElementById('combo');
+  const startOverlay = document.getElementById('startOverlay');
+  const startBtn = document.getElementById('startBtn');
+  const endOverlay = document.getElementById('endOverlay');
+  const restartBtn = document.getElementById('restartBtn');
+  const finalScore = document.getElementById('finalScore');
+  const ui = document.getElementById('ui');
+  let angle = 0; // degrees, 0 at top
+  let speed = 150; // degrees per second
+  let lastTime = 0;
+  let running = false;
+  let score = 0;
+  let combo = 0;
+  let best = parseInt(localStorage.getItem('gz_best')||'0',10);
+  bestEl.textContent = best;
+  let totalDuration = 30;
+  let timeLeft = 30;
+
+  const HIT_WINDOW = 20; // degrees tolerance
+  const perfectWindow = 8;
+  let lastInputTime = 0; // prevent duplicate events
+
+  // Audio
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const actx = AudioCtx ? new AudioCtx() : null;
+  function beep(freq=880, time=0.08, type='sine') {
+    if(!actx) return;
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = 0.0001;
+    o.connect(g); g.connect(actx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.2, actx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + time);
+    o.stop(actx.currentTime + time + 0.02);
+  }
+
+  function randDuration(){ return 20 + Math.floor(Math.random()*41); } // 20..60
+
+  function resetGame() {
+    score = 0; combo = 0; speed = 150 + Math.random()*30;
+    angle = Math.random()*360;
+    scoreEl.textContent = score;
+    comboEl.textContent = 'Combo: 0';
+    totalDuration = randDuration();
+    timeLeft = totalDuration;
+    timerBar.style.width = '100%';
+    timeText.textContent = `${timeLeft.toFixed(0)}s`;
+    endOverlay.classList.add('hidden');
+  }
+
+  function startGame() {
+    resetGame();
+    running = true;
+    lastTime = performance.now();
+    startOverlay.classList.add('hidden');
+    requestAnimationFrame(loop);
+  }
+
+  function endGame() {
+    running = false;
+    finalScore.textContent = score;
+    endOverlay.classList.remove('hidden');
+    if(score > best){ best = score; localStorage.setItem('gz_best', best); bestEl.textContent = best; }
+    beep(260,0.18,'sawtooth');
+  }
+
+  function hitCheck() {
+    // Target zone centered at 0 degrees (top). Normalize angle to [-180,180]
+    let a = ((angle % 360) + 360) % 360;
+    if(a > 180) a -= 360;
+    const dist = Math.abs(a); // distance from 0
+    if(dist <= HIT_WINDOW) {
+      // success
+      const perfect = dist <= perfectWindow;
+      const pts = perfect ? 3 : 1;
+      combo += 1;
+      score += pts * Math.max(1, Math.floor(combo/5)+1);
+      speed *= 1.035 + (perfect?0.02:0); // increase speed slightly
+      // feedback
+      scoreEl.textContent = score;
+      comboEl.textContent = 'Combo: ' + combo;
+      ui.querySelector('.circle').classList.add('pulse');
+      setTimeout(()=>ui.querySelector('.circle').classList.remove('pulse'),250);
+      if(perfect) beep(1200,0.06,'sine'); else beep(800,0.05,'sine');
+    } else {
+      // miss
+      combo = 0;
+      comboEl.textContent = 'Combo: 0';
+      speed *= 1.02; // slight ramp anyway
+      // small penalty to score
+      score = Math.max(0, score - 1);
+      scoreEl.textContent = score;
+      beep(220,0.09,'triangle');
+    }
+  }
+
+  // Input handling: use pointerdown for immediate, reliable mobile input with fallbacks
+  function onInputStart(e){
+    // prevent synthetic mouse event following touch/pointer
+    if(Date.now() - lastInputTime < 150) return;
+    lastInputTime = Date.now();
+    if(!running) return;
+    if(e.cancelable) e.preventDefault();
+    hitCheck();
+  }
+
+  // pointer events cover mouse & touch on modern browsers
+  circle.addEventListener('pointerdown', onInputStart);
+  // fallback for older browsers
+  circle.addEventListener('touchstart', (e)=>{ if(e.cancelable) e.preventDefault(); onInputStart(e); }, {passive:false});
+  circle.addEventListener('click', (e)=>{ onInputStart(e); });
+
+  startBtn.addEventListener('click', () => {
+    if(actx && actx.state === 'suspended') actx.resume();
+    startGame();
+  });
+  restartBtn.addEventListener('click', () => {
+    if(actx && actx.state === 'suspended') actx.resume();
+    startGame();
+  });
+
+  // Show start overlay initially
+  startOverlay.classList.remove('hidden');
+
+  function loop(ts) {
+    if(!running) return;
+    const dt = (ts - lastTime)/1000;
+    lastTime = ts;
+    angle += speed * dt;
+    needle.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+    // update timer
+    timeLeft -= dt;
+    if(timeLeft <= 0) { timeLeft = 0; timerBar.style.width = '0%'; timeText.textContent = '0s'; endGame(); return; }
+    const pct = Math.max(0, (timeLeft/totalDuration)*100);
+    timerBar.style.width = pct + '%';
+    timeText.textContent = Math.ceil(timeLeft) + 's';
+    requestAnimationFrame(loop);
+  }
+
+  // keyboard support: space to hit; R to restart
+  window.addEventListener('keydown', (e) => {
+    if(e.code === 'Space') {
+      e.preventDefault();
+      if(running) hitCheck();
+      else startGame();
+    }
+    if(e.key.toLowerCase() === 'r') {
+      startGame();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
